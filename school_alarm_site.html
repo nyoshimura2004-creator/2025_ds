@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>翌日の授業アラーム（デモ）</title>
+  <style>
+    :root{--bg:#f7fbff;--card:#ffffff;--accent:#4f46e5;--muted:#6b7280}
+    *{box-sizing:border-box}
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;background:linear-gradient(180deg,var(--bg),#eef6ff);min-height:100vh;margin:0;display:flex;align-items:center;justify-content:center;padding:24px}
+    .wrap{width:100%;max-width:920px;background:var(--card);border-radius:14px;box-shadow:0 8px 30px rgba(2,6,23,0.08);padding:28px;display:grid;grid-template-columns:1fr 350px;gap:24px}
+    h1{margin:0 0 8px;font-size:20px}
+    p.lead{margin:0 0 18px;color:var(--muted)}
+    .controls{display:flex;flex-direction:column;gap:12px}
+    label.radio{display:flex;gap:10px;align-items:center;padding:8px 12px;border-radius:8px;border:1px solid #eef2ff;cursor:pointer}
+    input[type=radio]{accent-color:var(--accent)}
+    .btns{display:flex;gap:8px;margin-top:6px}
+    button{background:var(--accent);color:#fff;border:0;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
+    button.secondary{background:#e6eefb;color:var(--accent)}
+    .note{font-size:13px;color:var(--muted)}
+
+    /* right column */
+    .preview{display:flex;flex-direction:column;align-items:center;gap:12px;padding:18px;border-radius:12px;background:linear-gradient(180deg,#fbfdff,#f4f9ff);border:1px solid #f0f6ff}
+    .clock{width:220px;height:220px}
+    .digital{font-family:monospace;font-size:20px}
+    .ok{display:inline-block;background:#ecfeff;color:#065f46;padding:8px 12px;border-radius:999px;font-weight:700}
+    .toast{margin-top:6px;padding:8px 12px;border-radius:10px;background:linear-gradient(90deg,#fffef2,#f0fff4);border:1px solid #e6f6eb;color:#064e3b}
+
+    footer{grid-column:1/-1;margin-top:10px;color:var(--muted);font-size:13px}
+
+    @media(max-width:880px){.wrap{grid-template-columns:1fr;padding:18px}.preview{order:-1;width:100%}}
+  </style>
+</head>
+<body>
+  <main class="wrap" role="main">
+    <section class="left">
+      <h1>翌日の授業を選んでアラームをセット (デモ)</h1>
+      <p class="lead">翌日参加する限を選んで「セット」を押すと、イラストの時計がその時間を示し「セットしました！」を表示します。実際の端末アラームは設定されません。</p>
+
+      <form id="form" class="controls" aria-labelledby="form-title">
+        <div>
+          <strong id="form-title">参加する限</strong>
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+            <label class="radio"><input type="radio" name="period" value="1"> 1限（07:30）</label>
+            <label class="radio"><input type="radio" name="period" value="2"> 2限（09:00）</label>
+            <label class="radio"><input type="radio" name="period" value="3"> 3限（12:00）</label>
+            <label class="radio"><input type="radio" name="period" value="4"> 4限（13:00）</label>
+          </div>
+        </div>
+
+        <div class="btns">
+          <button type="submit">セットする</button>
+          <button type="button" class="secondary" id="clear">リセット</button>
+        </div>
+
+        <p class="note">※ ローカルブラウザに保存します。別の端末では反映されません。</p>
+      </form>
+
+      <footer>
+        挙動の確認: 選択後に右側の時計が指定時刻を示し、デジタル時刻と「セットしました！」が出ます。GitHub Pagesへ置けば公開できます。
+      </footer>
+    </section>
+
+    <aside class="preview" aria-live="polite">
+      <svg class="clock" viewBox="0 0 220 220" xmlns="http://www.w3.org/2000/svg" id="svgClock" role="img" aria-label="アラーム時計イラスト">
+        <defs>
+          <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="6" stdDeviation="10" flood-opacity="0.12"/>
+          </filter>
+        </defs>
+        <g transform="translate(110,110)">
+          <circle r="96" fill="#fff" stroke="#e6eefb" stroke-width="2" filter="url(#shadow)" />
+          <!-- ticks -->
+          <g id="ticks"></g>
+          <!-- hands -->
+          <line id="hour" x1="0" y1="0" x2="0" y2="-50" stroke="#0f172a" stroke-width="6" stroke-linecap="round" transform="rotate(0)" />
+          <line id="minute" x1="0" y1="0" x2="0" y2="-72" stroke="#0f172a" stroke-width="4" stroke-linecap="round" transform="rotate(0)" />
+          <circle r="6" fill="#0f172a"/>
+        </g>
+      </svg>
+
+      <div class="digital" id="digital">--:--</div>
+      <div id="messageArea" class="toast" style="display:none">セットしました！ <span id="setTimeText" style="font-weight:700;margin-left:8px"></span></div>
+    </aside>
+  </main>
+
+  <script>
+    (function(){
+      // period -> time mapping
+      const map = { '1': {h:7,m:30}, '2':{h:9,m:0}, '3':{h:12,m:0}, '4':{h:13,m:0} };
+
+      const form = document.getElementById('form');
+      const digital = document.getElementById('digital');
+      const message = document.getElementById('messageArea');
+      const setTimeText = document.getElementById('setTimeText');
+      const clearBtn = document.getElementById('clear');
+
+      // SVG hand elements
+      const hourHand = document.getElementById('hour');
+      const minuteHand = document.getElementById('minute');
+      const ticks = document.getElementById('ticks');
+
+      // draw ticks (clock face)
+      for(let i=0;i<60;i++){
+        const tick = document.createElementNS('http://www.w3.org/2000/svg','line');
+        const angle = i*6 * Math.PI/180; // radians
+        const rOuter = 92, rInner = (i%5===0?78:86);
+        tick.setAttribute('x1', Math.sin(angle)*rInner);
+        tick.setAttribute('y1', -Math.cos(angle)*rInner);
+        tick.setAttribute('x2', Math.sin(angle)*rOuter);
+        tick.setAttribute('y2', -Math.cos(angle)*rOuter);
+        tick.setAttribute('stroke', i%5===0? '#0f172a':'#94a3b8');
+        tick.setAttribute('stroke-width', i%5===0?2:1);
+        ticks.appendChild(tick);
+      }
+
+      // helpers
+      function pad(n){return n.toString().padStart(2,'0')}
+      function setClock(h,m){
+        // set digital
+        digital.textContent = pad(h)+':'+pad(m);
+        // compute angles for hands
+        const minuteAngle = m*6; // degrees
+        const hourAngle = (h%12)*30 + m*0.5;
+        minuteHand.setAttribute('transform', 'rotate(' + minuteAngle + ')');
+        hourHand.setAttribute('transform', 'rotate(' + hourAngle + ')');
+      }
+
+      function showMessage(period){
+        const t = map[period];
+        setTimeText.textContent = pad(t.h) + ':' + pad(t.m);
+        message.style.display = 'block';
+        // small animation: hide after 4.5s
+        clearTimeout(window._msgTO);
+        window._msgTO = setTimeout(()=>{ message.style.display='none'; },4500);
+      }
+
+      // load from localStorage
+      const saved = localStorage.getItem('selectedPeriod');
+      if(saved && map[saved]){
+        // set radio
+        const radio = document.querySelector('input[name=period][value="'+saved+'"]');
+        if(radio) radio.checked = true;
+        const t = map[saved];
+        setClock(t.h,t.m);
+        showMessage(saved);
+      } else {
+        // default face: current time
+        const now = new Date();
+        setClock(now.getHours(), now.getMinutes());
+        digital.textContent = '--:--';
+      }
+
+      form.addEventListener('submit', function(e){
+        e.preventDefault();
+        const checked = document.querySelector('input[name=period]:checked');
+        if(!checked){ alert('参加する限を選んでください。'); return; }
+        const p = checked.value;
+        localStorage.setItem('selectedPeriod', p);
+        const t = map[p];
+        setClock(t.h,t.m);
+        showMessage(p);
+      });
+
+      clearBtn.addEventListener('click', function(){
+        localStorage.removeItem('selectedPeriod');
+        // reset to current time display
+        const now = new Date();
+        setClock(now.getHours(), now.getMinutes());
+        document.querySelectorAll('input[name=period]').forEach(i=>i.checked=false);
+        message.style.display = 'none';
+      });
+
+      // accessibility: allow keyboard selection
+      document.querySelectorAll('label.radio').forEach(l=>{
+        l.addEventListener('keydown', (e)=>{ if(e.key==='Enter' || e.key===' ') { const input = l.querySelector('input'); input.checked = true; } });
+      });
+
+    })();
+  </script>
+</body>
+</html>
